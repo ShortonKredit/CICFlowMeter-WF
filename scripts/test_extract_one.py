@@ -16,6 +16,8 @@ def main():
     parser = argparse.ArgumentParser(description="Test metadata feature extraction on a single trace CSV.")
     parser.add_argument("--input", type=str, default="sample_data/0_123movies.is_0.csv",
                         help="Path to the input CSV trace file.")
+    parser.add_argument("--output", type=str, default="sample_data/0_123movies.is_0_features.csv",
+                        help="Path to save the extracted features CSV.")
     args = parser.parse_args()
 
     if not os.path.exists(args.input):
@@ -72,6 +74,11 @@ def main():
     print("\n--- Features Summary ---")
     for idx, (name, val) in enumerate(features.items(), 1):
         print(f"{idx:02d}. {name:<30}: {val}")
+
+    # Save to file
+    import pandas as pd
+    pd.DataFrame([features]).to_csv(args.output, index=False)
+    print(f"\nSaved extracted features to: {args.output}")
 
     print("\nAll local unit tests PASSED successfully!")
 
