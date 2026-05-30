@@ -23,6 +23,8 @@ def main():
                         help="Thư mục đầu ra để lưu kết quả")
     parser.add_argument("--split", type=str, default="training_data",
                         help="Tên phân tách dữ liệu cần xử lý (ví dụ: training_data, validation_data, test_data)")
+    parser.add_argument("--limit", type=int, default=None,
+                        help="Giới hạn số lượng tệp xử lý cho mỗi loại (để test/verification)")
     
     args = parser.parse_args()
 
@@ -30,6 +32,8 @@ def main():
     os.makedirs(args.output_dir, exist_ok=True)
 
     print(f"=== Bắt đầu trích xuất đặc trưng siêu dữ liệu cho phân tách: {args.split} ===")
+    if args.limit:
+        print(f"[Verification Mode] Giới hạn số lượng xử lý: {args.limit} files mỗi tệp tar.")
     start_total_time = time.time()
 
     all_results = []
@@ -40,7 +44,7 @@ def main():
     if os.path.exists(args.closed_tar):
         print(f"\n[1/2] Đang xử lý closed-world từ: {args.closed_tar}")
         closed_results, closed_failures, sample_id = process_tar_archive(
-            args.closed_tar, args.split, "closed", sample_id
+            args.closed_tar, args.split, "closed", sample_id, limit=args.limit
         )
         all_results.extend(closed_results)
         all_failures.extend(closed_failures)
@@ -52,7 +56,7 @@ def main():
     if os.path.exists(args.open_tar):
         print(f"\n[2/2] Đang xử lý open-world từ: {args.open_tar}")
         open_results, open_failures, sample_id = process_tar_archive(
-            args.open_tar, args.split, "open", sample_id
+            args.open_tar, args.split, "open", sample_id, limit=args.limit
         )
         all_results.extend(open_results)
         all_failures.extend(open_failures)

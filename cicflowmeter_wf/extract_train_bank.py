@@ -42,7 +42,7 @@ def get_label_and_site_name(member_name: str, world: str) -> tuple:
             
     return -1, "unknown", os.path.basename(member_name)
 
-def process_tar_archive(tar_path: str, split: str, world: str, start_sample_id: int = 0) -> tuple:
+def process_tar_archive(tar_path: str, split: str, world: str, start_sample_id: int = 0, limit: int = None) -> tuple:
     """
     Processes a single tar.gz split file and extracts metadata features from matching members.
     
@@ -67,6 +67,12 @@ def process_tar_archive(tar_path: str, split: str, world: str, start_sample_id: 
         for m in tar.getmembers():
             if m.isfile() and m.name.startswith(prefix) and m.name.endswith(".csv"):
                 members.append(m)
+        
+        # Sort members by name to guarantee deterministic ordering
+        members.sort(key=lambda x: x.name)
+        
+        if limit is not None and limit > 0:
+            members = members[:limit]
         
         total_members = len(members)
         print(f"Found {total_members} matching trace CSV files to process.")

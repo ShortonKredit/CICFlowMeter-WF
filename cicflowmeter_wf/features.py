@@ -81,20 +81,20 @@ def extract_features_from_df(df: pd.DataFrame) -> dict:
     bwd_pkt_len_std = get_std(bwd_lengths)
 
     # IATs
-    flow_iats = np.diff(timestamps) if len(timestamps) > 1 else np.array([], dtype=float)
+    flow_iats = np.maximum(0.0, np.diff(timestamps)) if len(timestamps) > 1 else np.array([], dtype=float)
     flow_iat_mean = float(np.mean(flow_iats)) if len(flow_iats) > 0 else 0.0
     flow_iat_std = get_std(flow_iats)
     flow_iat_max = float(np.max(flow_iats)) if len(flow_iats) > 0 else 0.0
     flow_iat_min = float(np.min(flow_iats)) if len(flow_iats) > 0 else 0.0
 
-    fwd_iats = np.diff(fwd_timestamps) if len(fwd_timestamps) > 1 else np.array([], dtype=float)
+    fwd_iats = np.maximum(0.0, np.diff(fwd_timestamps)) if len(fwd_timestamps) > 1 else np.array([], dtype=float)
     fwd_iat_min = float(np.min(fwd_iats)) if len(fwd_iats) > 0 else 0.0
     fwd_iat_max = float(np.max(fwd_iats)) if len(fwd_iats) > 0 else 0.0
     fwd_iat_mean = float(np.mean(fwd_iats)) if len(fwd_iats) > 0 else 0.0
     fwd_iat_std = get_std(fwd_iats)
     fwd_iat_total = float(np.sum(fwd_iats)) if len(fwd_iats) > 0 else 0.0
 
-    bwd_iats = np.diff(bwd_timestamps) if len(bwd_timestamps) > 1 else np.array([], dtype=float)
+    bwd_iats = np.maximum(0.0, np.diff(bwd_timestamps)) if len(bwd_timestamps) > 1 else np.array([], dtype=float)
     bwd_iat_min = float(np.min(bwd_iats)) if len(bwd_iats) > 0 else 0.0
     bwd_iat_max = float(np.max(bwd_iats)) if len(bwd_iats) > 0 else 0.0
     bwd_iat_mean = float(np.mean(bwd_iats)) if len(bwd_iats) > 0 else 0.0

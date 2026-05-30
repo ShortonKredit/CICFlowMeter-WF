@@ -25,19 +25,19 @@ These features statistical properties of packet durations, bytes, packet counts,
 | 13 | `bwd_pkt_len_max` | CIC | $\max(\text{length}_{bwd})$ | Returns 0 if $N_{bwd} == 0$. |
 | 14 | `bwd_pkt_len_mean` | CIC | $\text{mean}(\text{length}_{bwd})$ | Returns 0 if $N_{bwd} == 0$. |
 | 15 | `bwd_pkt_len_std` | CIC | $\text{std}(\text{length}_{bwd})$ | Sample std (ddof=1). Returns 0 if $N_{bwd} < 2$. |
-| 16 | `flow_iat_mean` | CIC | $\text{mean}(\text{IAT}_{flow})$ | $\text{IAT}_i = t_i - t_{i-1}$. |
-| 17 | `flow_iat_std` | CIC | $\text{std}(\text{IAT}_{flow})$ | Sample std (ddof=1). Returns 0 if $N_{flow\_iats} < 2$. |
-| 18 | `flow_iat_max` | CIC | $\max(\text{IAT}_{flow})$ | Returns 0 if no IAT values. |
-| 19 | `flow_iat_min` | CIC | $\min(\text{IAT}_{flow})$ | Returns 0 if no IAT values. |
-| 20 | `fwd_iat_min` | CIC | $\min(\text{IAT}_{fwd})$ | Returns 0 if $N_{fwd\_iats} == 0$. |
-| 21 | `fwd_iat_max` | CIC | $\max(\text{IAT}_{fwd})$ | Returns 0 if $N_{fwd\_iats} == 0$. |
-| 22 | `fwd_iat_mean` | CIC | $\text{mean}(\text{IAT}_{fwd})$ | Returns 0 if $N_{fwd\_iats} == 0$. |
-| 23 | `fwd_iat_std` | CIC | $\text{std}(\text{IAT}_{fwd})$ | Sample std (ddof=1). |
+| 16 | `flow_iat_mean` | CIC | $\text{mean}(\text{IAT}_{flow})$ | $\text{IAT}_i = \max(0.0, t_i - t_{i-1})$. Clamped to be non-negative. |
+| 17 | `flow_iat_std` | CIC | $\text{std}(\text{IAT}_{flow})$ | Sample std (ddof=1). Clamped to be non-negative. |
+| 18 | `flow_iat_max` | CIC | $\max(\text{IAT}_{flow})$ | Clamped to be non-negative. |
+| 19 | `flow_iat_min` | CIC | $\min(\text{IAT}_{flow})$ | Clamped to be non-negative. |
+| 20 | `fwd_iat_min` | CIC | $\min(\text{IAT}_{fwd})$ | Clamped to be non-negative. |
+| 21 | `fwd_iat_max` | CIC | $\max(\text{IAT}_{fwd})$ | Clamped to be non-negative. |
+| 22 | `fwd_iat_mean` | CIC | $\text{mean}(\text{IAT}_{fwd})$ | Clamped to be non-negative. |
+| 23 | `fwd_iat_std` | CIC | $\text{std}(\text{IAT}_{fwd})$ | Sample std (ddof=1). Clamped to be non-negative. |
 | 24 | `fwd_iat_total` | CIC | $\sum \text{IAT}_{fwd}$ | Equivalent to $t_{fwd\_last} - t_{fwd\_first}$. |
-| 25 | `bwd_iat_min` | CIC | $\min(\text{IAT}_{bwd})$ | Returns 0 if $N_{bwd\_iats} == 0$. |
-| 26 | `bwd_iat_max` | CIC | $\max(\text{IAT}_{bwd})$ | Returns 0 if $N_{bwd\_iats} == 0$. |
-| 27 | `bwd_iat_mean` | CIC | $\text{mean}(\text{IAT}_{bwd})$ | Returns 0 if $N_{bwd\_iats} == 0$. |
-| 28 | `bwd_iat_std` | CIC | $\text{std}(\text{IAT}_{bwd})$ | Sample std (ddof=1). |
+| 25 | `bwd_iat_min` | CIC | $\min(\text{IAT}_{bwd})$ | Clamped to be non-negative. |
+| 26 | `bwd_iat_max` | CIC | $\max(\text{IAT}_{bwd})$ | Clamped to be non-negative. |
+| 27 | `bwd_iat_mean` | CIC | $\text{mean}(\text{IAT}_{bwd})$ | Clamped to be non-negative. |
+| 28 | `bwd_iat_std` | CIC | $\text{std}(\text{IAT}_{bwd})$ | Sample std (ddof=1). Clamped to be non-negative. |
 | 29 | `bwd_iat_total` | CIC | $\sum \text{IAT}_{bwd}$ | Equivalent to $t_{bwd\_last} - t_{bwd\_first}$. |
 | 30 | `fwd_packets_per_s` | CIC | $\frac{N_{fwd}}{\text{flow\_duration}}$ | Outgoing packet rate. |
 | 31 | `bwd_packets_per_s` | CIC | $\frac{N_{bwd}}{\text{flow\_duration}}$ | Incoming packet rate. |
@@ -47,9 +47,9 @@ These features statistical properties of packet durations, bytes, packet counts,
 | 35 | `pkt_len_std` | CIC | $\text{std}(\text{length}_{flow})$ | Sample std (ddof=1). |
 | 36 | `pkt_len_var` | CIC | $\text{var}(\text{length}_{flow})$ | Sample variance (ddof=1). |
 | 37 | `down_up_ratio` | CIC | $\frac{N_{bwd}}{N_{fwd}}$ | Returns 0 if $N_{fwd} == 0$. |
-| 38 | `avg_packet_size` | CIC | $\text{mean}(\text{length}_{flow})$ | Same as `pkt_len_mean`. |
-| 39 | `fwd_segment_size_avg`| CIC | $\text{mean}(\text{length}_{fwd})$ | Same as `fwd_pkt_len_mean`. |
-| 40 | `bwd_segment_size_avg`| CIC | $\text{mean}(\text{length}_{bwd})$ | Same as `bwd_pkt_len_mean`. |
+| 38 | `avg_packet_size` | CIC | $\text{mean}(\text{length}_{flow})$ | Same as `pkt_len_mean`. (Intentional duplicate for CIC compatibility). |
+| 39 | `fwd_segment_size_avg`| CIC | $\text{mean}(\text{length}_{fwd})$ | Same as `fwd_pkt_len_mean`. (Intentional duplicate for CIC compatibility). |
+| 40 | `bwd_segment_size_avg`| CIC | $\text{mean}(\text{length}_{bwd})$ | Same as `bwd_pkt_len_mean`. (Intentional duplicate for CIC compatibility). |
 | 41 | `fwd_bytes_bulk_avg` | CIC | $\frac{\text{fbulk\_bytes\_total}}{\text{fbulk\_states}}$ | Ported bulk algorithm (see below). |
 | 42 | `fwd_packet_bulk_avg`| CIC | $\frac{\text{fbulk\_pkts\_total}}{\text{fbulk\_states}}$ | Ported bulk algorithm (see below). |
 | 43 | `fwd_bulk_rate_avg` | CIC | $\frac{\text{fbulk\_bytes\_total}}{\text{fbulk\_duration}}$ | Ported bulk algorithm (see below). |
@@ -72,6 +72,10 @@ These features statistical properties of packet durations, bytes, packet counts,
 ---
 
 ### Core Algorithms and Approximations (Group A)
+
+#### 0. IAT Calculations
+* **Definition:** Inter-arrival time is the elapsed time between consecutive packets.
+* **Porting Details:** To handle slightly out-of-order or duplicate timestamp resolution issues in raw trace files, IATs are clamped to a minimum of `0.0` seconds: $\text{IAT}_i = \max(0.0, t_i - t_{i-1})$.
 
 #### 1. Bulk Features (Features 41-46)
 * **Definition:** A bulk is a sequence of at least 4 consecutive packets in one direction (forward or backward) where:

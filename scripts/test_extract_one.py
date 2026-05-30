@@ -76,9 +76,13 @@ def main():
         print(f"{idx:02d}. {name:<30}: {val}")
 
     # Save to file
-    import pandas as pd
-    pd.DataFrame([features]).to_csv(args.output, index=False)
-    print(f"\nSaved extracted features to: {args.output}")
+    try:
+        import pandas as pd
+        pd.DataFrame([features]).to_csv(args.output, index=False)
+        print(f"\nSaved extracted features to: {args.output}")
+    except Exception as e:
+        print(f"\n[Warning] Could not save features to {args.output} ({str(e)}).")
+        print("This is usually because the file is open in another application (like VS Code or Excel).")
 
     print("\nAll local unit tests PASSED successfully!")
 

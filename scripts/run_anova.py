@@ -32,8 +32,13 @@ def main():
 
     # 1. Đọc dữ liệu
     print("Đang đọc tệp CSV dữ liệu...")
-    df = pd.read_csv(args.input)
-    print(f"Đã đọc thành công {len(df)} dòng dữ liệu.")
+    df_raw = pd.read_csv(args.input)
+    print(f"Đã đọc thành công {len(df_raw)} dòng dữ liệu.")
+    
+    # Lọc chỉ lấy closed-world cho ANOVA
+    print("Đang lọc dữ liệu: Chỉ sử dụng closed-world (monitored) samples cho ANOVA...")
+    df = df_raw[df_raw["world"] == "closed"].reset_index(drop=True)
+    print(f"Số lượng samples closed-world sử dụng cho ANOVA: {len(df)}")
 
     # 2. Chạy ANOVA
     ranking_df = run_anova_ranking(df)
@@ -64,7 +69,8 @@ def main():
 
     anova_log = {
         "input_file": args.input,
-        "total_samples": len(df),
+        "total_samples_read": len(df_raw),
+        "total_samples_anova": len(df),
         "total_features": len(ranking_df),
         "elapsed_time_seconds": elapsed_time,
         "top5_features": top5_info,
