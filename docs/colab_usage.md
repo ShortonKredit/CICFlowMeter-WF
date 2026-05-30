@@ -95,31 +95,38 @@ All small-batch outputs are saved directly under Google Drive:
 Once Phase 1 passes successfully and the small-batch report shows no errors, proceed to extract features for the full dataset using local directories.
 
 ### Step 4.1: Full Extraction (training_data split)
+Run the extraction script pointing to the extracted directories and outputting to `/content/drive/MyDrive/WF/metadata_feature_bank/train/`.
 ```bash
 !python scripts/extract_metadata_train.py \
     --closed-dir /content/wf_split/closed/training_data/closed_world \
     --open-dir /content/wf_split/open/training_data/open_world \
-    --output-dir /content/drive/MyDrive/WF/metadata_feature_bank/ \
+    --output-dir /content/drive/MyDrive/WF/metadata_feature_bank/train/ \
     --split training_data
 ```
-* **Expected Output**: `/content/drive/MyDrive/WF/metadata_feature_bank/metadata_feature_bank_train.csv` (~133k traces)
+
+### Expected Outputs
+The script generates exactly these 4 outputs under `/content/drive/MyDrive/WF/metadata_feature_bank/train/`:
+1. **`metadata_feature_bank_train_all74.csv`**: Main feature CSV containing all successfully extracted traces with exactly 74 features.
+2. **`extraction_quality_report.txt`**: Text report containing general runtime metrics, actual row count, failed trace count, total NaN/Inf counts, and timing anomaly counts.
+3. **`timing_anomaly_report.csv`**: Logs filenames where raw timestamp inversions were encountered, along with the inversion count and minimum negative delta.
+4. **`feature_names_74.json`**: JSON array containing the ordered list of 74 feature names.
 
 ---
 
 ## 5. Phase 3: ANOVA Feature Ranking (Closed-World Only)
 
-Run ANOVA on the generated metadata feature bank to rank features by their importance in distinguishing closed-world sites.
+Run ANOVA on the generated metadata feature bank to rank features by their importance in distinguishing closed-world sites. **Only run this step if the quality report verifies 133,000 actual rows and 0 NaN/Inf counts.**
 
 ### Execution Command
 ```bash
 !python scripts/run_anova.py \
-    --input /content/drive/MyDrive/WF/metadata_feature_bank/metadata_feature_bank_train.csv \
-    --output-dir /content/drive/MyDrive/WF/metadata_feature_bank/
+    --input /content/drive/MyDrive/WF/metadata_feature_bank/train/metadata_feature_bank_train_all74.csv \
+    --output-dir /content/drive/MyDrive/WF/metadata_feature_bank/train/
 ```
 
 ### Expected Outputs
 The command outputs ANOVA ranking details under:
-`/content/drive/MyDrive/WF/metadata_feature_bank/`
+`/content/drive/MyDrive/WF/metadata_feature_bank/train/`
 
 * **`anova_ranking_train.csv`**: Full sorted table of 74 features ranked by $F$-score descending.
 * **`top5_features.json`**, **`top10_features.json`**, **`top15_features.json`**, **`top20_features.json`**: JSON arrays of the top $K$ features.
@@ -129,7 +136,7 @@ The command outputs ANOVA ranking details under:
 
 ## 6. Fallback Option: Tar-based Processing
 
-If you cannot extract the datasets to the local SSD due to disk space limitations, you can fall back to the slow Tar Mode (processes traces directly from GDrive tars sequentially, but note that random seeks will take significantly longer).
+If you cannot extract the datasets to the local SSD due to disk space limitations, you can fall back to Tar Mode (processes traces directly from GDrive tars sequentially, but note that random seeks will take significantly longer).
 
 ### Small-batch Tar Mode:
 ```bash
@@ -145,6 +152,6 @@ If you cannot extract the datasets to the local SSD due to disk space limitation
 !python scripts/extract_metadata_train.py \
     --closed-tar /content/drive/MyDrive/WF/raw_splited/closed_world_split.tar.gz \
     --open-tar /content/drive/MyDrive/WF/raw_splited/open_world_split.tar.gz \
-    --output-dir /content/drive/MyDrive/WF/metadata_feature_bank/ \
+    --output-dir /content/drive/MyDrive/WF/metadata_feature_bank/train/ \
     --split training_data
 ```
