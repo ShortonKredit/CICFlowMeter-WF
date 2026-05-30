@@ -1,0 +1,23 @@
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Dataset/Prompt files
+prompt.txt
+*.tar.gz
+*.csv
+*.parquet
+*.h5
+*.log
+
+# IDE files
+.vscode/
+.idea/
+.gradle/
+build/
+target/
+out/
+bin/
