@@ -15,7 +15,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cicflowmeter_wf.trace_reader import read_trace_csv
 from cicflowmeter_wf.features import extract_features_and_quality
 from cicflowmeter_wf.feature_names import FEATURE_NAMES
-from cicflowmeter_wf.extract_train_bank import get_label_and_site_name
+from cicflowmeter_wf.extract_train_bank import get_label_and_site_name, process_directory
 
 def compute_dist_stats(arr):
     """
@@ -25,7 +25,6 @@ def compute_dist_stats(arr):
     if len(arr) == 0:
         return {"min": 0.0, "max": 0.0, "mean": 0.0, "std": 0.0}
     arr_np = np.array(arr, dtype=float)
-    # Replace NaN/inf if any (safety check)
     arr_np = np.nan_to_num(arr_np, nan=0.0, posinf=0.0, neginf=0.0)
     
     val_min = float(np.min(arr_np))
@@ -36,21 +35,43 @@ def compute_dist_stats(arr):
 
 def main():
     parser = argparse.ArgumentParser(description="Run small-batch metadata feature extraction (50 traces total).")
-    parser.add_argument("--closed-tar", type=str, required=True,
+    parser.add_argument("--closed-tar", type=str, default=None,
                         help="Path to closed_world_split.tar.gz")
-    parser.add_argument("--open-tar", type=str, required=True,
+    parser.add_argument("--open-tar", type=str, default=None,
                         help="Path to open_world_split.tar.gz")
+    parser.add_argument("--closed-dir", type=str, default=None,
+                        help="Path to extracted closed_world directory")
+    parser.add_argument("--open-dir", type=str, default=None,
+                        help="Path to extracted open_world directory")
     parser.add_argument("--output-dir", type=str, required=True,
                         help="Output directory for reports")
     parser.add_argument("--split", type=str, default="training_data",
-                        help="Split to extract from (training_data, validation_data, test_data)")
+                        help="Split to extract from if using tar mode (training_data, validation_data, test_data)")
     args = parser.parse_args()
+
+    # Validate arguments
+    use_dir_mode = args.closed_dir is not None or args.open_dir is not None
+    if use_dir_mode:
+        if args.closed_dir is None or args.open_dir is None:
+            print("Error: Both --closed-dir and --open-dir must be provided for Directory Mode.")
+            sys.exit(1)
+    else:
+        if args.closed_tar is None or args.open_tar is None:
+            print("Error: Must provide either both directories (--closed-dir/--open-dir) or both tar files (--closed-tar/--open-tar).")
+            sys.exit(1)
 
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
 
-    print(f"=== Starting Small-Batch Verification for split: {args.split} ===")
+    mode_str = "Directory Mode" if use_dir_mode else "Tar Mode"
+    print(f"=== Starting Small-Batch Verification ({mode_str}) ===")
+    
     start_total_time = time.time()
+
+    # Profiling variables
+    scan_time_total = 0.0
+    csv_read_time_total = 0.0
+    feature_compute_time_total = 0.0
 
     all_results = []
     success_count = 0
@@ -66,75 +87,83 @@ def main():
 
     timing_anomalies = []
 
-    # We will sample 25 closed and 25 open traces
-    targets = [
-        {"tar_path": args.closed_tar, "world": "closed", "limit": 25},
-        {"tar_path": args.open_tar, "world": "open", "limit": 25}
-    ]
-
-    for target in targets:
-        tar_path = target["tar_path"]
-        world = target["world"]
-        limit = target["limit"]
-        tar_filename = os.path.basename(tar_path)
-
-        if not os.path.exists(tar_path):
-            print(f"Error: Tar file not found: {tar_path}")
-            sys.exit(1)
-
-        print(f"\nProcessing {world}-world traces from: {tar_filename}...")
+    if use_dir_mode:
+        targets = [
+            {"dir_path": args.closed_dir, "world": "closed", "limit": 25},
+            {"dir_path": args.open_dir, "world": "open", "limit": 25}
+        ]
         
-        with tarfile.open(tar_path, "r:gz") as tar:
-            prefix = f"{args.split}/{world}_world/"
-            
-            # Find and sort matching csv files
-            members = []
-            for m in tar.getmembers():
-                if m.isfile() and m.name.startswith(prefix) and m.name.endswith(".csv"):
-                    members.append(m)
+        for target in targets:
+            dir_path = target["dir_path"]
+            world = target["world"]
+            limit = target["limit"]
 
-            # Deterministic, sorted ordering
-            members.sort(key=lambda x: x.name)
-            
-            selected_members = members[:limit]
-            print(f"Sampled first {len(selected_members)} traces (out of {len(members)} total matches).")
+            if not os.path.exists(dir_path):
+                print(f"Error: Directory path not found: {dir_path}")
+                sys.exit(1)
 
-            for idx, member in enumerate(selected_members, 1):
-                label, site_name, trace_name = get_label_and_site_name(member.name, world)
+            print(f"\nScanning local files from {world}-world directory: {dir_path}...")
+            
+            t_scan_start = time.time()
+            csv_paths = []
+            for root, _, files in os.walk(dir_path):
+                for f in files:
+                    if f.endswith(".csv"):
+                        csv_paths.append(os.path.join(root, f))
+            
+            # Sort to guarantee deterministic ordering
+            csv_paths = [p.replace("\\", "/") for p in csv_paths]
+            csv_paths.sort()
+            selected_paths = csv_paths[:limit]
+            scan_time_total += (time.time() - t_scan_start)
+            
+            print(f"Sampled first {len(selected_paths)} files (out of {len(csv_paths)} total CSVs).")
+
+            for idx, filepath in enumerate(selected_paths, 1):
+                parts = filepath.split('/')
+                trace_name = parts[-1]
                 
-                f_obj = tar.extractfile(member)
-                if f_obj is None:
-                    print(f"  [Fail] Could not extract: {member.name}")
-                    fail_count += 1
-                    continue
+                if world == "closed":
+                    site_name = parts[-2] if len(parts) >= 2 else "unknown"
+                    try:
+                        label = int(site_name.split('_')[0])
+                    except (ValueError, IndexError):
+                        label = -1
+                else:
+                    site_name = "open_world"
+                    label = 100
 
-                t0 = time.time()
+                t_file_start = time.time()
                 try:
-                    df = read_trace_csv(f_obj)
+                    t_read_start = time.time()
+                    df = read_trace_csv(filepath)
+                    csv_read_time_total += (time.time() - t_read_start)
+
+                    t_compute_start = time.time()
                     features, quality = extract_features_and_quality(df)
-                    dt = time.time() - t0
+                    feature_compute_time_total += (time.time() - t_compute_start)
+
+                    dt = time.time() - t_file_start
                     runtimes.append(dt)
 
-                    # Update diagnostic stats
+                    # Update quality metrics
                     total_nan_count += quality["nan_count"]
                     total_inf_count += quality["inf_count"]
                     total_negative_iat_count += quality["raw_negative_iat_count"]
                     total_raw_negative_ts_diff += quality["raw_negative_iat_count"]
 
-                    # Check for timing anomaly in packet timestamps
                     if quality["raw_negative_iat_count"] > 0:
                         timestamps = df["timestamp"].to_numpy(dtype=float)
                         raw_diffs = np.diff(timestamps) if len(timestamps) > 1 else np.array([])
                         neg_diffs = raw_diffs[raw_diffs < 0.0]
                         min_neg = float(np.min(neg_diffs)) if len(neg_diffs) > 0 else 0.0
                         timing_anomalies.append({
-                            "tar_file": tar_filename,
-                            "member_path": member.name,
+                            "tar_file": "extracted_directory",
+                            "member_path": filepath,
                             "raw_negative_diff_count": quality["raw_negative_iat_count"],
                             "min_negative_diff": min_neg
                         })
 
-                    # Construct row
                     row = {
                         "sample_id": sample_id,
                         "split": args.split,
@@ -142,24 +171,117 @@ def main():
                         "label": label,
                         "site_name": site_name,
                         "trace_name": trace_name,
-                        "tar_file": tar_filename,
-                        "member_path": member.name
+                        "tar_file": "extracted_directory",
+                        "member_path": filepath
                     }
+                    # Dynamically detect split from filepath
+                    for split_cand in ["training_data", "validation_data", "test_data"]:
+                        if f"/{split_cand}/" in filepath or filepath.startswith(f"{split_cand}/"):
+                            row["split"] = split_cand
+                            break
+
                     row.update(features)
                     all_results.append(row)
                     sample_id += 1
                     success_count += 1
-                    print(f"  [Success] {success_count}/50: {member.name} in {dt:.3f}s")
-
+                    print(f"  [Success] {success_count}/50: {site_name}/{trace_name} in {dt:.3f}s")
                 except Exception as e:
-                    dt = time.time() - t0
-                    print(f"  [Fail] Error processing {member.name}: {str(e)}")
+                    dt = time.time() - t_file_start
+                    print(f"  [Fail] Error processing {filepath}: {str(e)}")
                     fail_count += 1
+    else:
+        # Fallback Tar Mode
+        targets = [
+            {"tar_path": args.closed_tar, "world": "closed", "limit": 25},
+            {"tar_path": args.open_tar, "world": "open", "limit": 25}
+        ]
 
-    total_runtime = time.time() - start_total_time
-    avg_runtime = np.mean(runtimes) if len(runtimes) > 0 else 0.0
+        for target in targets:
+            tar_path = target["tar_path"]
+            world = target["world"]
+            limit = target["limit"]
+            tar_filename = os.path.basename(tar_path)
 
-    print(f"\nBatch processing complete. Success: {success_count}, Fail: {fail_count}")
+            if not os.path.exists(tar_path):
+                print(f"Error: Tar file not found: {tar_path}")
+                sys.exit(1)
+
+            print(f"\nScanning tar archive: {tar_filename}...")
+            
+            t_scan_start = time.time()
+            with tarfile.open(tar_path, "r:gz") as tar:
+                prefix = f"{args.split}/{world}_world/"
+                members = []
+                for m in tar.getmembers():
+                    if m.isfile() and m.name.startswith(prefix) and m.name.endswith(".csv"):
+                        members.append(m)
+                
+                members.sort(key=lambda x: x.name)
+                selected_members = members[:limit]
+                scan_time_total += (time.time() - t_scan_start)
+                
+                print(f"Sampled first {len(selected_members)} traces (out of {len(members)} total matches).")
+
+                for idx, member in enumerate(selected_members, 1):
+                    label, site_name, trace_name = get_label_and_site_name(member.name, world)
+                    
+                    f_obj = tar.extractfile(member)
+                    if f_obj is None:
+                        print(f"  [Fail] Could not extract: {member.name}")
+                        fail_count += 1
+                        continue
+
+                    t_file_start = time.time()
+                    try:
+                        t_read_start = time.time()
+                        df = read_trace_csv(f_obj)
+                        csv_read_time_total += (time.time() - t_read_start)
+
+                        t_compute_start = time.time()
+                        features, quality = extract_features_and_quality(df)
+                        feature_compute_time_total += (time.time() - t_compute_start)
+
+                        dt = time.time() - t_file_start
+                        runtimes.append(dt)
+
+                        total_nan_count += quality["nan_count"]
+                        total_inf_count += quality["inf_count"]
+                        total_negative_iat_count += quality["raw_negative_iat_count"]
+                        total_raw_negative_ts_diff += quality["raw_negative_iat_count"]
+
+                        if quality["raw_negative_iat_count"] > 0:
+                            timestamps = df["timestamp"].to_numpy(dtype=float)
+                            raw_diffs = np.diff(timestamps) if len(timestamps) > 1 else np.array([])
+                            neg_diffs = raw_diffs[raw_diffs < 0.0]
+                            min_neg = float(np.min(neg_diffs)) if len(neg_diffs) > 0 else 0.0
+                            timing_anomalies.append({
+                                "tar_file": tar_filename,
+                                "member_path": member.name,
+                                "raw_negative_diff_count": quality["raw_negative_iat_count"],
+                                "min_negative_diff": min_neg
+                            })
+
+                        row = {
+                            "sample_id": sample_id,
+                            "split": args.split,
+                            "world": world,
+                            "label": label,
+                            "site_name": site_name,
+                            "trace_name": trace_name,
+                            "tar_file": tar_filename,
+                            "member_path": member.name
+                        }
+                        row.update(features)
+                        all_results.append(row)
+                        sample_id += 1
+                        success_count += 1
+                        print(f"  [Success] {success_count}/50: {member.name} in {dt:.3f}s")
+                    except Exception as e:
+                        dt = time.time() - t_file_start
+                        print(f"  [Fail] Error processing {member.name}: {str(e)}")
+                        fail_count += 1
+
+    t_export_start = time.time()
 
     # Ensure we actually successfully extracted some traces
     if len(all_results) == 0:
@@ -173,7 +295,6 @@ def main():
     
     metadata_csv_path = os.path.join(args.output_dir, "metadata_feature_bank_small.csv")
     df_features.to_csv(metadata_csv_path, index=False)
-    print(f"Saved {metadata_csv_path}")
 
     # 2. Create feature stats DataFrame
     stats_rows = []
@@ -210,16 +331,13 @@ def main():
     df_stats = pd.DataFrame(stats_rows)
     stats_csv_path = os.path.join(args.output_dir, "small_batch_feature_stats.csv")
     df_stats.to_csv(stats_csv_path, index=False)
-    print(f"Saved {stats_csv_path}")
 
     # 3. Save timing anomaly report
     timing_anomaly_csv_path = os.path.join(args.output_dir, "timing_anomaly_report.csv")
     df_anomaly = pd.DataFrame(timing_anomalies)
     if len(df_anomaly) == 0:
-        # Create empty dataframe with headers
         df_anomaly = pd.DataFrame(columns=["tar_file", "member_path", "raw_negative_diff_count", "min_negative_diff"])
     df_anomaly.to_csv(timing_anomaly_csv_path, index=False)
-    print(f"Saved {timing_anomaly_csv_path}")
 
     # 4. Generate distributions for report
     timing_stats = {
@@ -242,21 +360,31 @@ def main():
         "idle_std": compute_dist_stats(df_features["idle_std"])
     }
 
+    export_time_total = time.time() - t_export_start
+    total_runtime = time.time() - start_total_time
+    avg_runtime = np.mean(runtimes) if len(runtimes) > 0 else 0.0
+
     # 5. Generate small_batch_report.txt
     report_lines = [
         "======================================================================",
         "SMALL-BATCH TEST VERIFICATION REPORT (50 TRACES)",
         "======================================================================",
+        f"Execution Mode      : {mode_str}",
         f"Split Name          : {args.split}",
         f"Generation Time     : {time.strftime('%Y-%m-%d %H:%M:%S')}",
         "",
         "----------------------------------------------------------------------",
-        "1. GENERAL PERFORMANCE METRICS",
+        "1. GENERAL PERFORMANCE METRICS & PROFILING BREAKDOWN",
         "----------------------------------------------------------------------",
         f"Total Traces Success: {success_count}",
         f"Total Traces Failed : {fail_count}",
         f"Total Runtime (s)   : {total_runtime:.6f}",
         f"Average Runtime (s) : {avg_runtime:.6f}",
+        f"Profiling breakdown :",
+        f"  - Scanning / Listing Time : {scan_time_total:.6f} seconds",
+        f"  - CSV Read / Parsing Time : {csv_read_time_total:.6f} seconds",
+        f"  - Feature Calculation Time: {feature_compute_time_total:.6f} seconds",
+        f"  - Disk Export / Report    : {export_time_total:.6f} seconds",
         "",
         "----------------------------------------------------------------------",
         "2. DATA QUALITY AUDIT",

@@ -125,3 +125,89 @@ def process_tar_archive(tar_path: str, split: str, world: str, start_sample_id: 
                 })
                 
     return results, failed_traces, sample_id
+
+def process_directory(dir_path: str, world: str, start_sample_id: int = 0, limit: int = None) -> tuple:
+    """
+    Processes a local directory containing trace CSV files and extracts metadata features.
+    Handles nested folders for closed-world and flat structures for open-world.
+    """
+    results = []
+    failed_traces = []
+    sample_id = start_sample_id
+
+    if not os.path.exists(dir_path):
+        print(f"Warning: Directory does not exist: {dir_path}")
+        return results, failed_traces, sample_id
+
+    # Find all CSV files recursively
+    csv_paths = []
+    for root, _, files in os.walk(dir_path):
+        for f in files:
+            if f.endswith(".csv"):
+                csv_paths.append(os.path.join(root, f))
+
+    # Sort to guarantee deterministic ordering
+    csv_paths = [p.replace("\\", "/") for p in csv_paths]
+    csv_paths.sort()
+
+    if limit is not None and limit > 0:
+        csv_paths = csv_paths[:limit]
+
+    total_files = len(csv_paths)
+    print(f"Found {total_files} trace CSV files in directory: {dir_path}")
+
+    start_time = time.time()
+    for idx, filepath in enumerate(csv_paths, 1):
+        parts = filepath.split('/')
+        trace_name = parts[-1]
+        
+        if world == "closed":
+            # Parent directory is site_name
+            site_name = parts[-2] if len(parts) >= 2 else "unknown"
+            try:
+                label = int(site_name.split('_')[0])
+            except (ValueError, IndexError):
+                label = -1
+        else:
+            site_name = "open_world"
+            label = 100
+
+        if idx % 1000 == 0 or idx == total_files:
+            elapsed = time.time() - start_time
+            rate = idx / elapsed if elapsed > 0 else 0
+            eta = (total_files - idx) / rate if rate > 0 else 0
+            print(f"  Processed {idx}/{total_files} files. Rate: {rate:.1f} files/s. ETA: {eta/60:.1f}m")
+
+        try:
+            df = read_trace_csv(filepath)
+            features = extract_features_from_df(df)
+
+            row = {
+                "sample_id": sample_id,
+                "split": "training_data",
+                "world": world,
+                "label": label,
+                "site_name": site_name,
+                "trace_name": trace_name,
+                "tar_file": "extracted_directory",
+                "member_path": filepath
+            }
+            # Dynamically detect the split from the filepath if present
+            for split_cand in ["training_data", "validation_data", "test_data"]:
+                if f"/{split_cand}/" in filepath or filepath.startswith(f"{split_cand}/"):
+                    row["split"] = split_cand
+                    break
+
+            row.update(features)
+            results.append(row)
+            sample_id += 1
+
+        except Exception as e:
+            print(f"Error processing trace {filepath}: {str(e)}")
+            failed_traces.append({
+                "tar_file": "extracted_directory",
+                "member_path": filepath,
+                "error": str(e)
+            })
+
+    return results, failed_traces, sample_id
