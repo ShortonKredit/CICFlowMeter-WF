@@ -76,12 +76,23 @@ def main():
         print(f"{idx:02d}. {name:<30}: {val}")
 
     # Save to file
+    output_path = args.output
+    if os.path.exists(output_path):
+        base, ext = os.path.splitext(output_path)
+        counter = 2
+        while True:
+            candidate = f"{base}_{counter}{ext}"
+            if not os.path.exists(candidate):
+                output_path = candidate
+                break
+            counter += 1
+
     try:
         import pandas as pd
-        pd.DataFrame([features]).to_csv(args.output, index=False)
-        print(f"\nSaved extracted features to: {args.output}")
+        pd.DataFrame([features]).to_csv(output_path, index=False)
+        print(f"\nSaved extracted features to: {output_path}")
     except Exception as e:
-        print(f"\n[Warning] Could not save features to {args.output} ({str(e)}).")
+        print(f"\n[Warning] Could not save features to {output_path} ({str(e)}).")
         print("This is usually because the file is open in another application (like VS Code or Excel).")
 
     print("\nAll local unit tests PASSED successfully!")
