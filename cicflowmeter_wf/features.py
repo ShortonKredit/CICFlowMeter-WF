@@ -442,3 +442,30 @@ def extract_features_from_df(df: pd.DataFrame) -> dict:
             feature_dict[name] = 0.0
 
     return feature_dict
+
+def extract_features_and_quality(df: pd.DataFrame) -> tuple:
+    """
+    Extracts the 74 features and also returns data quality metrics.
+    
+    Returns:
+        tuple (feature_dict, quality_dict)
+    """
+    if "packet_index" in df.columns:
+        df = df.sort_values("packet_index").reset_index(drop=True)
+        
+    timestamps = df["timestamp"].to_numpy(dtype=float)
+    raw_diffs = np.diff(timestamps) if len(timestamps) > 1 else np.array([])
+    raw_negative_iat_count = int(np.sum(raw_diffs < 0.0))
+    
+    feature_dict = extract_features_from_df(df)
+    
+    nan_count = int(np.sum(np.isnan(timestamps))) + int(np.sum(np.isnan(df["length"].to_numpy(dtype=float)))) + int(np.sum(np.isnan(df["direction"].to_numpy(dtype=float))))
+    inf_count = int(np.sum(np.isinf(timestamps))) + int(np.sum(np.isinf(df["length"].to_numpy(dtype=float)))) + int(np.sum(np.isinf(df["direction"].to_numpy(dtype=float))))
+    
+    quality_dict = {
+        "raw_negative_iat_count": raw_negative_iat_count,
+        "nan_count": nan_count,
+        "inf_count": inf_count
+    }
+    
+    return feature_dict, quality_dict

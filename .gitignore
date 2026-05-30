@@ -21,3 +21,6 @@ build/
 target/
 out/
 bin/
+
+# Local outputs
+outputs/
